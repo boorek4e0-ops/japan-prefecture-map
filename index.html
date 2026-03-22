@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Japan Prefecture Population Density — 2000–2025</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a222c;
+      --text: #e8eef4;
+      --muted: #8b9aab;
+      --accent: #c42d2d;
+      --border: #2a3544;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      height: 100%;
+      min-height: 520px;
+    }
+    header {
+      padding: 1rem 1.25rem 1.1rem;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #1c2630 0%, var(--bg) 100%);
+    }
+    header h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.35rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    header p {
+      margin: 0;
+      font-size: 0.88rem;
+      color: var(--muted);
+      max-width: 52rem;
+      line-height: 1.45;
+    }
+    main {
+      display: grid;
+      grid-template-columns: min(340px, 100%) 1fr;
+      min-height: 0;
+    }
+    @media (max-width: 880px) {
+      main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    }
+    .sidebar {
+      padding: 1rem 1.1rem 1.25rem;
+      border-right: 1px solid var(--border);
+      background: var(--panel);
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    @media (max-width: 880px) {
+      .sidebar { border-right: none; border-bottom: 1px solid var(--border); max-height: 42vh; }
+    }
+    .panel-block h2 {
+      margin: 0 0 0.5rem;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .year-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .year-row input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+    }
+    .year-value {
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      font-size: 1.25rem;
+      min-width: 3.25rem;
+      text-align: right;
+      color: #fff;
+    }
+    .regions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.35rem 0.6rem;
+    }
+    .regions label {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.82rem;
+      cursor: pointer;
+      color: #c5d0dc;
+    }
+    .regions input { accent-color: var(--accent); }
+    .region-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
+    .region-actions button {
+      background: var(--border);
+      border: 1px solid #3d4d60;
+      color: var(--text);
+      padding: 0.35rem 0.65rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    .region-actions button:hover { background: #354050; }
+    .legend {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .legend-bar {
+      height: 14px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #ffe4e4 0%, #ffb3b3 25%, #e85555 55%, #8b0000 100%);
+      border: 1px solid #444;
+    }
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .note {
+      font-size: 0.72rem;
+      color: var(--muted);
+      line-height: 1.4;
+      margin: 0;
+    }
+    #map {
+      min-height: 280px;
+      background: #1e2832;
+    }
+    .leaflet-container { font-family: inherit; background: #1e2832; }
+    .density-label {
+      background: rgba(15, 20, 25, 0.82) !important;
+      border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      border-radius: 4px !important;
+      color: #f0f4f8 !important;
+      font-size: 10px !important;
+      font-weight: 600 !important;
+      padding: 2px 5px !important;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35) !important;
+      pointer-events: none !important;
+    }
+    .leaflet-tooltip.density-label::before { display: none; }
+    .error-banner {
+      display: none;
+      margin: 0.75rem 1rem;
+      padding: 0.65rem 0.85rem;
+      background: #3d1515;
+      border: 1px solid #8b2d2d;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: #ffc9c9;
+    }
+    .error-banner.visible { display: block; }
+    #geo-file-panel[hidden] { display: none !important; }
+    #geo-file-panel .geo-file-hint {
+      font-size: 0.82rem;
+      color: #c5d0dc;
+      line-height: 1.45;
+      margin: 0 0 0.6rem;
+    }
+    #geo-file-input {
+      width: 100%;
+      font-size: 0.8rem;
+      color: var(--text);
+    }
+    #map.file-drop-target { outline: 2px dashed var(--accent); outline-offset: -4px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Population density across Japan’s 47 prefectures</h1>
+      <p>
+        Choropleth map for StoryMap-style presentations: prefectures are shaded red (darker = higher people per km²).
+        Drag the year control to interpolate between census-based 2000 and 2020 densities, then a gentle 2020–2025 trend.
+        Filter by macro-region; click a prefecture for details.
+      </p>
+    </header>
+    <div id="load-error" class="error-banner"></div>
+    <main>
+      <aside class="sidebar">
+        <div class="panel-block" id="geo-file-panel" hidden>
+          <h2>Load prefecture boundaries</h2>
+          <p class="geo-file-hint" id="geo-file-hint"></p>
+          <input type="file" id="geo-file-input" accept=".geojson,.json,application/geo+json,application/json" />
+          <p class="note" style="margin-top:0.55rem">
+            Or drag <code style="color:#aab;">japan_land.geojson</code> onto the map. (Opening this page as a <code style="color:#aab;">file://</code> link blocks automatic loading.)
+          </p>
+        </div>
+        <div class="panel-block">
+          <h2>Year</h2>
+          <div class="year-row">
+            <input type="range" id="year-slider" min="2000" max="2025" value="2020" step="1" />
+            <span class="year-value" id="year-label">2020</span>
+          </div>
+        </div>
+        <div class="panel-block">
+          <h2>Region</h2>
+          <div class="regions" id="region-filters"></div>
+          <div class="region-actions">
+            <button type="button" id="select-all-regions">All regions</button>
+            <button type="button" id="clear-regions">Clear</button>
+          </div>
+        </div>
+        <div class="panel-block">
+          <h2>Legend</h2>
+          <div class="legend">
+            <div class="legend-bar" aria-hidden="true"></div>
+            <div class="legend-labels">
+              <span>Lower density</span>
+              <span>Higher density</span>
+            </div>
+          </div>
+        </div>
+        <p class="note">
+          <strong>2020</strong> densities match the published 2020 Population Census (people per km² of prefecture land area).
+          <strong>2000</strong> uses the same measure from the 2000 census (rounded); years in between are linearly interpolated.
+          <strong>2021–2025</strong> apply a mild −0.8%/year trend from 2020 (approximate post‑census change, not official projections).
+          Boundaries: <code style="color:#aab;">japan_land.geojson</code> (47 features, JIS <code>id</code>). With a local server (e.g. VS Code Live Server), the map loads automatically; otherwise use the file control above.
+        </p>
+      </aside>
+      <div id="map" role="application" aria-label="Map of Japan prefectures"></div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+(function () {
+  "use strict";
+
+  const REGIONS = [
+    "Hokkaido",
+    "Tohoku",
+    "Kanto",
+    "Chubu",
+    "Kansai",
+    "Chugoku",
+    "Shikoku",
+    "Kyushu-Okinawa",
+  ];
+
+  const PREF_REGION = {
+    1: "Hokkaido",
+    2: "Tohoku", 3: "Tohoku", 4: "Tohoku", 5: "Tohoku", 6: "Tohoku", 7: "Tohoku",
+    8: "Kanto", 9: "Kanto", 10: "Kanto", 11: "Kanto", 12: "Kanto", 13: "Kanto", 14: "Kanto",
+    15: "Chubu", 16: "Chubu", 17: "Chubu", 18: "Chubu", 19: "Chubu", 20: "Chubu", 21: "Chubu", 22: "Chubu", 23: "Chubu",
+    24: "Kansai", 25: "Kansai", 26: "Kansai", 27: "Kansai", 28: "Kansai", 29: "Kansai", 30: "Kansai",
+    31: "Chugoku", 32: "Chugoku", 33: "Chugoku", 34: "Chugoku", 35: "Chugoku",
+    36: "Shikoku", 37: "Shikoku", 38: "Shikoku", 39: "Shikoku",
+    40: "Kyushu-Okinawa", 41: "Kyushu-Okinawa", 42: "Kyushu-Okinawa", 43: "Kyushu-Okinawa",
+    44: "Kyushu-Okinawa", 45: "Kyushu-Okinawa", 46: "Kyushu-Okinawa", 47: "Kyushu-Okinawa",
+  };
+
+  const NAMES = {
+    1: ["Hokkaido", "北海道"],
+    2: ["Aomori", "青森県"],
+    3: ["Iwate", "岩手県"],
+    4: ["Miyagi", "宮城県"],
+    5: ["Akita", "秋田県"],
+    6: ["Yamagata", "山形県"],
+    7: ["Fukushima", "福島県"],
+    8: ["Ibaraki", "茨城県"],
+    9: ["Tochigi", "栃木県"],
+    10: ["Gunma", "群馬県"],
+    11: ["Saitama", "埼玉県"],
+    12: ["Chiba", "千葉県"],
+    13: ["Tokyo", "東京都"],
+    14: ["Kanagawa", "神奈川県"],
+    15: ["Niigata", "新潟県"],
+    16: ["Toyama", "富山県"],
+    17: ["Ishikawa", "石川県"],
+    18: ["Fukui", "福井県"],
+    19: ["Yamanashi", "山梨県"],
+    20: ["Nagano", "長野県"],
+    21: ["Gifu", "岐阜県"],
+    22: ["Shizuoka", "静岡県"],
+    23: ["Aichi", "愛知県"],
+    24: ["Mie", "三重県"],
+    25: ["Shiga", "滋賀県"],
+    26: ["Kyoto", "京都府"],
+    27: ["Osaka", "大阪府"],
+    28: ["Hyogo", "兵庫県"],
+    29: ["Nara", "奈良県"],
+    30: ["Wakayama", "和歌山県"],
+    31: ["Tottori", "鳥取県"],
+    32: ["Shimane", "島根県"],
+    33: ["Okayama", "岡山県"],
+    34: ["Hiroshima", "広島県"],
+    35: ["Yamaguchi", "山口県"],
+    36: ["Tokushima", "徳島県"],
+    37: ["Kagawa", "香川県"],
+    38: ["Ehime", "愛媛県"],
+    39: ["Kochi", "高知県"],
+    40: ["Fukuoka", "福岡県"],
+    41: ["Saga", "佐賀県"],
+    42: ["Nagasaki", "長崎県"],
+    43: ["Kumamoto", "熊本県"],
+    44: ["Oita", "大分県"],
+    45: ["Miyazaki", "宮崎県"],
+    46: ["Kagoshima", "鹿児島県"],
+    47: ["Okinawa", "沖縄県"],
+  };
+
+  /** 2020 population density (people / km²) — 2020 Population Census, land area basis */
+  const D2020 = {
+    1: 66.6, 2: 130.9, 3: 79.2, 4: 319.5, 5: 82.4, 6: 150.1, 7: 134.7,
+    8: 478.7, 9: 307.3, 10: 311.8, 11: 1934.0, 12: 1219.8, 13: 6402.6, 14: 3823.2,
+    15: 177.5, 16: 244.8, 17: 273.9, 18: 184.5, 19: 186.2, 20: 154.1, 21: 188.9, 22: 474.0, 23: 1458.0,
+    24: 312.5, 25: 359.4, 26: 559.0, 27: 4638.4, 28: 659.0, 29: 387.6, 30: 199.5,
+    31: 164.5, 32: 100.0, 33: 272.8, 34: 350.0, 35: 221.5,
+    36: 183.2, 37: 529.0, 38: 249.2, 39: 97.4,
+    40: 1022.0, 41: 337.0, 42: 332.0, 43: 241.0, 44: 182.0, 45: 145.0, 46: 179.0, 47: 640.0,
+  };
+
+  /** 2000 population density (people / km²) — 2000 Population Census, comparable land-area definitions */
+  const D2000 = {
+    1: 72.9, 2: 142.5, 3: 86.8, 4: 324.8, 5: 96.2, 6: 161.2, 7: 150.1,
+    8: 479.5, 9: 308.2, 10: 318.4, 11: 1792.0, 12: 1153.0, 13: 5503.0, 14: 3665.0,
+    15: 188.2, 16: 252.0, 17: 278.0, 18: 192.0, 19: 191.0, 20: 158.0, 21: 194.0, 22: 487.0, 23: 1410.0,
+    24: 318.0, 25: 338.0, 26: 566.0, 27: 4150.0, 28: 651.0, 29: 378.0, 30: 209.0,
+    31: 168.0, 32: 105.0, 33: 278.0, 34: 358.0, 35: 231.0,
+    36: 192.0, 37: 517.0, 38: 256.0, 39: 104.0,
+    40: 993.0, 41: 342.0, 42: 345.0, 43: 248.0, 44: 188.0, 45: 152.0, 46: 186.0, 47: 580.0,
+  };
+
+  function densityForYear(prefId, year) {
+    const a = D2000[prefId];
+    const b = D2020[prefId];
+    if (year <= 2000) return a;
+    if (year <= 2020) return a + (b - a) * (year - 2000) / 20;
+    const d2025 = b * Math.pow(0.992, 5);
+    return b + (d2025 - b) * (year - 2020) / 5;
+  }
+
+  function redForDensity(d, dMin, dMax) {
+    const span = dMax - dMin || 1;
+    const t = Math.max(0, Math.min(1, (d - dMin) / span));
+    const L = 93 - t * 56;
+    const S = 40 + t * 52;
+    return `hsl(0, ${S}%, ${L}%)`;
+  }
+
+  const map = L.map("map", { zoomControl: true, minZoom: 4, maxZoom: 12 });
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    subdomains: "abcd",
+    maxZoom: 20,
+  }).addTo(map);
+
+  const regionFiltersEl = document.getElementById("region-filters");
+  const activeRegions = new Set(REGIONS);
+  REGIONS.forEach((r) => {
+    const id = "region-" + r.replace(/[^a-z-]/gi, "");
+    const label = document.createElement("label");
+    label.innerHTML = `<input type="checkbox" id="${id}" data-region="${r}" checked /> ${r}`;
+    regionFiltersEl.appendChild(label);
+  });
+
+  document.getElementById("select-all-regions").addEventListener("click", () => {
+    regionFiltersEl.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+      cb.checked = true;
+      activeRegions.add(cb.dataset.region);
+    });
+    refreshMap();
+  });
+  document.getElementById("clear-regions").addEventListener("click", () => {
+    regionFiltersEl.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+      cb.checked = false;
+      activeRegions.delete(cb.dataset.region);
+    });
+    refreshMap();
+  });
+  regionFiltersEl.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.type !== "checkbox") return;
+    const r = t.dataset.region;
+    if (t.checked) activeRegions.add(r);
+    else activeRegions.delete(r);
+    refreshMap();
+  });
+
+  const yearSlider = document.getElementById("year-slider");
+  const yearLabel = document.getElementById("year-label");
+  yearSlider.addEventListener("input", () => {
+    yearLabel.textContent = yearSlider.value;
+    refreshMap();
+  });
+
+  const prefLayers = {};
+  let currentYear = 2020;
+
+  function rangeForVisible(year) {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let id = 1; id <= 47; id++) {
+      if (!activeRegions.has(PREF_REGION[id])) continue;
+      const d = densityForYear(id, year);
+      lo = Math.min(lo, d);
+      hi = Math.max(hi, d);
+    }
+    if (!Number.isFinite(lo)) return { lo: 0, hi: 1 };
+    return { lo, hi };
+  }
+
+  function styleForPref(id, year, lo, hi) {
+    const region = PREF_REGION[id];
+    const on = activeRegions.has(region);
+    const d = densityForYear(id, year);
+    return {
+      fillColor: on ? redForDensity(d, lo, hi) : "#2a3038",
+      color: on ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.12)",
+      weight: on ? 1 : 0.5,
+      fillOpacity: on ? 0.92 : 0.12,
+    };
+  }
+
+  function refreshMap() {
+    currentYear = +yearSlider.value;
+    const { lo, hi } = rangeForVisible(currentYear);
+    for (let id = 1; id <= 47; id++) {
+      const layer = prefLayers[id];
+      if (!layer) continue;
+      layer.setStyle(styleForPref(id, currentYear, lo, hi));
+      const d = densityForYear(id, currentYear);
+      const shown = activeRegions.has(PREF_REGION[id]);
+      const text = shown ? String(d >= 100 ? Math.round(d) : d.toFixed(1)) : "";
+      layer.setTooltipContent(text);
+      const tipEl = layer.getTooltip && layer.getTooltip() ? layer.getTooltip().getElement() : null;
+      if (tipEl) tipEl.style.visibility = shown ? "visible" : "hidden";
+    }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById("load-error");
+    el.textContent = msg;
+    if (msg) el.classList.add("visible");
+    else el.classList.remove("visible");
+  }
+
+  function revealFileLoader(hint) {
+    const panel = document.getElementById("geo-file-panel");
+    panel.hidden = false;
+    document.getElementById("geo-file-hint").textContent = hint;
+  }
+
+  let geoLayer = null;
+
+  function buildMapFromGeoJson(data) {
+    if (!data || !Array.isArray(data.features)) {
+      showError("That file is not a GeoJSON FeatureCollection.");
+      return;
+    }
+    showError("");
+    if (geoLayer) {
+      map.removeLayer(geoLayer);
+      geoLayer = null;
+    }
+    for (const k of Object.keys(prefLayers)) delete prefLayers[k];
+
+    const { lo, hi } = rangeForVisible(currentYear);
+    geoLayer = L.geoJSON(data, {
+      style: (feat) => styleForPref(feat.properties.id, currentYear, lo, hi),
+      onEachFeature: (feat, layer) => {
+        const id = feat.properties.id;
+        if (!PREF_REGION[id]) return;
+        prefLayers[id] = layer;
+
+        layer.bindTooltip("", {
+          permanent: true,
+          direction: "center",
+          className: "density-label",
+          opacity: 0.95,
+        });
+
+        layer.bindPopup("<div></div>", { closeButton: true });
+        layer.on("click", () => {
+          const [en, ja] = NAMES[id] || [feat.properties.nam || "—", feat.properties.nam_ja || ""];
+          const d = densityForYear(id, currentYear);
+          const reg = PREF_REGION[id];
+          layer.setPopupContent(
+            `<div style="min-width:200px;font-family:inherit;line-height:1.45">
+              <strong style="font-size:1.05rem">${en}</strong><br/>
+              <span style="color:#555">${ja}</span><br/><br/>
+              <strong>Region:</strong> ${reg}<br/>
+              <strong>Density (${currentYear}):</strong> ${d.toLocaleString(undefined, { maximumFractionDigits: 1 })} people/km²
+            </div>`
+          );
+          layer.openPopup();
+        });
+      },
+    }).addTo(map);
+
+    map.fitBounds(geoLayer.getBounds(), { padding: [28, 28], maxZoom: 8 });
+    yearLabel.textContent = yearSlider.value;
+    refreshMap();
+    document.getElementById("geo-file-panel").hidden = true;
+  }
+
+  function loadGeoJsonFromFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        buildMapFromGeoJson(data);
+      } catch (err) {
+        showError("Could not read that file as JSON: " + (err.message || String(err)));
+      }
+    };
+    reader.onerror = () => showError("Could not read the file.");
+    reader.readAsText(file, "UTF-8");
+  }
+
+  document.getElementById("geo-file-input").addEventListener("change", (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) loadGeoJsonFromFile(f);
+  });
+
+  const mapEl = document.getElementById("map");
+  mapEl.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    mapEl.classList.add("file-drop-target");
+  });
+  mapEl.addEventListener("dragleave", () => mapEl.classList.remove("file-drop-target"));
+  mapEl.addEventListener("drop", (e) => {
+    e.preventDefault();
+    mapEl.classList.remove("file-drop-target");
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    const ok =
+      /\.geojson$/i.test(f.name) ||
+      /\.json$/i.test(f.name) ||
+      (f.type && (f.type.includes("json") || f.type.includes("geo")));
+    if (ok) loadGeoJsonFromFile(f);
+    else showError("Drop a .geojson or .json file.");
+  });
+
+  const isFileProtocol = location.protocol === "file:";
+
+  if (isFileProtocol) {
+    revealFileLoader(
+      "Browsers block automatic loading of data files from disk. Choose japan_land.geojson from this folder, or drag it onto the map."
+    );
+  } else {
+    fetch("japan_land.geojson")
+      .then((r) => {
+        if (!r.ok) throw new Error("HTTP " + r.status + " for japan_land.geojson");
+        return r.json();
+      })
+      .then(buildMapFromGeoJson)
+      .catch(() => {
+        showError("Could not fetch japan_land.geojson from this URL. Load the file below or run a static server in this folder.");
+        revealFileLoader("Pick japan_land.geojson here if it sits next to index.html, or fix the server path.");
+      });
+  }
+})();
+  </script>
+</body>
+</html>
